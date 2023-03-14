@@ -1,0 +1,279 @@
+#include "msp.h"
+/*
+#define S1 BIT0
+#define S2 BIT1
+#define S3 BIT2
+#define S4 BIT3
+#define S5 BIT4
+#define S6 BIT5
+#define S7 BIT6
+#define S8 BIT7
+#define IR BIT3
+
+#define RIGHT_SPEED 2000
+#define LEFT_SPEED 2000
+*/
+/**
+ * main.c.c
+ */
+// Definizione delle soglie per la rilevazione della linea
+void main(void)
+{
+     Clock_Init48MHz();
+     LaunchPad_Init();   // interruttori e LED integrati
+     Bump_Init();        // interruttori a urto
+     Motor_InitSimple(); // inizializzazione
+     SysTick_Init();
+     uint8_t isForward = 0;
+     uint8_t Data;
+     //int time =20;
+
+   //--------------------------------------------------------------------------------
+
+    /* P7->DIR |= BIT2;
+     if (P7->DIR & BIT2)
+           printf(" A %d",P7->IN & BIT2);
+        else
+           printf(" B %d",P7->IN & BIT2);
+*/
+//----------------------------------------------------------------------------------------------------------
+   /*  int foo;
+     P7->DIR &= 0x07; // set port 4 bit 1 (pin 5) to an output
+     P7->REN |= 0x07;
+     //foo = P7->OUT &= 0x2A;
+     foo = P7->IN;
+     while(1){
+
+     //foo = P7->IN & 0x02; // check only bit 1
+     // if high – foo has the value 0x02 NOT 1
+     // or
+     //foo = (P4->IN & 0x02) && 0x01; // if high – foo has the value 0x01
+     printf("foo= %d \n",foo);
+     }
+*/
+//---------------------------------------------------------------------------------------------------
+     /*P7->DIR = 1;
+     P7->DIR |= BIT1;
+     P7->DIR &= BIT2;
+     P7->OUT |= BIT3;
+     P7->OUT |= BIT4;
+     P7->OUT &= BIT5;
+     P7->OUT &= BIT6;
+     P7->OUT |= BIT7;
+     printf(" P7 %d", P7->IN);
+     printf(" A %d \n",P7->OUT & BIT0);
+     printf(" B %d \n",P7->OUT & BIT1);
+     printf(" C %d \n",P7->OUT & BIT2);
+     printf(" D %d \n",P7->OUT & BIT3);
+     printf(" E %d \n",P7->OUT & BIT4);
+     printf(" F %d \n",P7->OUT & BIT5);
+     printf(" G %d \n",P7->OUT & BIT6);
+     printf(" H %d \n",P7->OUT & BIT7);
+     //Data = Reflectance_Read(1000);
+     //Clock_Delay1ms(10);
+     //printf("%u",Data);
+
+*/
+
+     //-----------------------------------------------------------------------------------------------------------------------
+
+
+
+    /* uint8_t scale = 5;
+         uint8_t duty = 5*scale;
+         uint8_t period = 10*scale;
+         uint8_t time = 10*scale;
+
+         while(1){
+             Motor_ForwardSimple(duty, period, time);
+             Clock_Delay1ms(1);
+             /*
+             Motor_ForwardSimple(duty, period, time);
+             Clock_Delay1ms(10);
+             if(Bump_Read_Left() == 1 && Bump_Read_Right() == 0){
+                 Motor_StopSimple(duty, period, time);
+                 Clock_Delay1ms(10);
+                 Motor_BackwardSimple(duty, period, time);
+                 Clock_Delay1ms(10);
+                 Motor_LeftSimple(duty, period, time);
+                 Clock_Delay1ms(10);
+             }
+             if(Bump_Read_Right() == 1 && Bump_Read_Left() == 0){
+                 Motor_StopSimple(duty, period, time);
+                 Clock_Delay1ms(10);
+                 Motor_BackwardSimple(duty, period, time);
+                 Clock_Delay1ms(10);
+                 Motor_RightSimple(duty, period, time);
+                 Clock_Delay1ms(10);
+             }
+
+             if (Bump_Read() == 1){
+                 /*
+                 Motor_StopSimple(duty, period, time);
+                 Clock_Delay1ms(1000);
+
+                 Motor_BackwardSimple(duty, period, time);
+                 Clock_Delay1ms(1000);
+                 Motor_RightSimple(duty, period, time);
+                 Clock_Delay1ms(1000);
+             }
+         }
+
+*/
+
+
+
+
+
+  //-------------------------------------------------------------------------------------------------------------------
+
+     // Initialize GPIO
+    //  P1->DIR &= ~BIT2; // P1.2 is an input
+
+         /* Initialize GPIO
+            P1->DIR |= BIT0; // P1.0 is an output
+            P7->DIR &= ~(BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6 | BIT7); // set P7.0-7.7 as inputs
+            P7->REN |= (BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6 | BIT7);  // enable Pull-up/Pull-down resistors
+            P7->OUT |= (BIT0 | BIT1 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6 | BIT7);  // set Pull-up/Pull-down resistors to Pull-up
+            P5->DIR |= BIT3;  // P5.3 is an output
+*/
+            /*while(1){
+                // Read voltage on P7.0 and output binary to P1.0
+                if (P7->IN & BIT0) {
+                    P1->OUT |= BIT0; // set P1.0 high
+                    printf("A\n");
+                } else {
+                    P1->OUT &= ~BIT0; // set P1.0 low
+                    printf("B\n");
+                }
+                // Read voltage on P7.1 and output binary to P1.0
+                if (P7->IN & BIT1) {
+                    P1->OUT |= BIT0; // set P1.0 high
+                    printf("C\n");
+                } else {
+                    P1->OUT &= ~BIT0; // set P1.0 low
+                    printf("D\n");
+                }
+                // Read voltage on P7.2 and output binary to P1.0
+                if (P7->IN & BIT2) {
+                    P1->OUT |= BIT0; // set P1.0 high
+                    printf("E\n");
+                } else {
+                    P1->OUT &= ~BIT0; // set P1.0 low
+                    printf("F\n");
+                }
+                // Read voltage on P7.3 and output binary to P1.0
+                if (P7->IN & BIT3) {
+                    P1->OUT |= BIT0; // set P1.0 high
+                    printf("G\n");
+                } else {
+                    P1->OUT &= ~BIT0; // set P1.0 low
+                    printf("H\n");
+                }
+                // Read voltage on P7.4 and output binary to P1.0
+                if (P7->IN & BIT4) {
+                    P1->OUT |= BIT0; // set P1.0 high
+                    printf("I\n");
+                } else {
+                    P1->OUT &= ~BIT0; // set P1.0 low
+                    printf("L\n");
+                }
+                // Read voltage on P7.5 and output binary to P1.0
+                if (P7->IN & BIT5) {
+                    P1->OUT |= BIT0; // set P1.0 high
+                    printf("M\n");
+                } else {
+                    P1->OUT &= ~BIT0; // set P1.0 low
+                    printf("N\n");
+                }
+                // Read voltage on P7.6 and output binary to P1.0
+                if (P7->IN & BIT6) {
+                    P1->OUT |= BIT0; // set P1.0 high
+                    printf("O\n");
+                } else {
+                    P1->OUT &= ~BIT0; // set P1.0 low
+                    printf("P\n");
+                }
+                // Read voltage on P7.7 and output binary to P1.0
+                if (P7->IN & BIT7) {
+                    P1->OUT |= BIT0; // set P1.0 high
+                    printf("Q\n");
+                }
+            }*/
+//------------------------------------------------------------------------------------------------------------------------------
+     // Initialize line sensor pins as inputs
+       /*  WDTCTL = WDTPW | WDTHOLD;   // Disabilita il Watchdog Timer
+         P2SEL0 &= ~(BIT4 | BIT5);   // Imposta i pin 2.4 e 2.5 come I/O digitali
+         P2SEL1 &= ~(BIT4 | BIT5);
+         P2DIR &= ~(BIT4 | BIT5);    // Imposta i pin 2.4 e 2.5 come input
+         P2REN |= BIT4 | BIT5;       // Abilita le resistenze di pull-up
+         P2OUT |= BIT4 | BIT5;
+
+         while(1) {
+             uint8_t sensor_state = (P2IN & (BIT6 | BIT7)) >> 4; // Leggi lo stato dei pin 2.4 e 2.5 e shifta a destra di 4 bit
+             printf("sensor_state %d \n",sensor_state);
+         if(sensor_state != 3){
+                     Motor_ForwardSimple(100,500);
+                     printf("sensor_state %d \n",sensor_state);
+                     break;
+                 }
+
+                 else if(sensor_state == 3 ){
+                     Motor_RightSimple(75,200);
+                     printf("sensor_state %d \n",sensor_state);
+                      break;
+                 }
+
+                 else if(sensor_state == 0b10){
+                     Motor_LeftSimple(75,200);
+                     printf("sensor_state %d \n",sensor_state);
+                     break;
+                 }
+
+                 else if(sensor_state != 0b11){
+                     Motor_ForwardSimple(100,500);
+                     printf("sensor_state %d \n",sensor_state);
+                     break;
+                 }
+             }
+
+*/
+//-------------------------------------------------------------------------------------------------------------------------------
+     //fa un quadrato
+     Motor_ForwardSimple(100,500);//15 secondi e va dritto con un duty cicle di 10 secondi
+     Motor_LeftSimple(75,200);
+     Motor_ForwardSimple(100,500);//15 secondi e va dritto con un duty cicle di 10 secondi
+     Motor_LeftSimple(75,200);
+     Motor_ForwardSimple(100,500);//15 secondi e va dritto con un duty cicle di 10 secondi
+     Motor_LeftSimple(75,200);
+     Motor_ForwardSimple(100,500);//15 secondi e va dritto con un duty cicle di 10 secondi
+     Motor_LeftSimple(75,200);
+//---------------------------------------------------------------------------------------------------------------------------------
+//  Motor_RightSimple(100,200);
+//  Motor_BackwardSimple(100,400);
+ /*    while(1){
+        if(LaunchPad_Input()==0xED && isForward == 0){
+             Motor_ForwardSimple(3000,350);
+             P2->OUT |= 0x01;
+             isForward = 1;
+             time-=5;
+         }
+         else if (LaunchPad_Input()==0xEF && time == 15){
+             Motor_LeftSimple(100,200);
+             P2->OUT |= 0x03; //right switch, left motor, Turn right
+             time -= 5;
+         }
+         else if(LaunchPad_Input()==0xFD && time == 10){
+             Motor_RightSimple(100,200);// left switch, right motor, turn left
+             P2->OUT &= ~0x07;
+             time -=5;
+         }
+         else if(LaunchPad_Input()==0xED && isForward == 1 && time == 5){
+             Motor_ForwardSimple(3000,200);
+             P2->OUT |= 0x02;
+             isForward = 0;
+             time =0;
+         }
+     }*/
+     }
+

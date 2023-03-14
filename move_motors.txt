@@ -1,0 +1,557 @@
+#include "msp.h"
+
+/*
+LEGENDA DEI NUMERI ESADECIMALI IN DECIMALE:
+0x13: 19
+0x07: 7
+0x12: 18
+0x01: 1
+0xC0: 192
+0x30: 48
+0xFF: 255
+0x80: 128
+0x40: 64
+0xED: 237
+*/
+
+uint8_t bumpVal;
+uint8_t launchIn;
+void Motor_InitSimple(void);
+void Motor_StopSimple(void);
+void Motor_ForwardSimple(uint16_t duty, uint32_t time);
+void Motor_BackwardSimple(uint16_t duty, uint32_t time);
+void Motor_LeftSimple(uint16_t duty, uint32_t time);
+void Motor_RightSimple(uint16_t duty, uint32_t time);
+void Clock_Delay1ms(uint32_t n);
+void SysTick_Wait10ms(uint32_t delay);
+uint8_t Bump_Read(void);
+
+
+/*************
+
+*  Launchpad init
+
+************/
+
+void LaunchPad_Init(void){
+P5->SEL0 &= ~0x13;
+P5->SEL1 &= ~0x13;    // 1) configura P1.4 e P1.1 come GPIO
+P5->DIR &= ~0x12;     // 2) fare P1.4 e P1.1 in
+P5->DIR |= 0x01;      //    fai fuori P1.0
+P5->REN |= 0x12;      // 3) attiva i pull resistors su P1.4 e P1.1
+P5->OUT |= 0x12;      //    P1.4 and P1.1 are pull-up
+P2->SEL0 &= ~0x07;
+P2->SEL1 &= ~0x07;    // 1) configura P2.2-P2.0 come GPIO
+P2->DIR |= 0x07;      // 2) fare uscire P2.2-P2.0
+P2->DS |= 0x07;       // 3) attiva maggiore forza motrice
+P2->OUT &= ~0x07;     //    spegne tutti i LED
+}
+
+
+
+void Motor_InitSimple(void)
+{
+// Inizializza le 6 linee GPIO e mette il driver in stop
+// Ritorna subito
+// inizializza P1.6 e P1.7 e li rende output
+P5->SEL0 &= ~0x30; // imposta P5.4 e P5.5 come GPIO
+P5->SEL1 &= ~0x30; // DIR
+//P1->DIR &= ~0x12;  // imposta P1.1 e P1.4 come input
+P5->DIR |= 0x30;   // imposta P5.4 e P5.5 come output
+P5->REN |= 0x30;   // imposta resistori
+P2->SEL0 &= ~0xC0; // imposta P2.6 come P2.7 come GPIO
+P2->SEL1 &= ~0xC0; // PWM
+P2->DIR |= 0xC0;   // imposta P2.6 e P2.7 come output
+P2->REN |= 0xC0;  // imposta resistori
+P3->SEL0 &= ~0xC0; // imposta P3.6 e P3.7 come GPIO
+P3->SEL1 &= ~0xC0; // SLP
+P3->DIR |= 0xC0;   // imposta P3.6 e P3.7 come output
+P3->OUT &= ~0xC0;  // Mette i driver a riposo
+P3->REN |= 0xC0;  // imposta resistori
+}
+
+
+void LineSensor_Init(void) {
+    P1->SEL0 &= ~(BIT4 | BIT5 | BIT6);  // set P1.4, P1.5, and P1.6 as GPIO
+    P1->SEL1 &= ~(BIT4 | BIT5 | BIT6);
+    P1->DIR &= ~(BIT4 | BIT5 | BIT6);   // set P1.4, P1.5, and P1.6 as inputs
+    P1->REN |= (BIT4 | BIT5 | BIT6);    // enable pull-up resistors for P1.4, P1.5, and P1.6
+    P1->OUT |= (BIT4 | BIT5 | BIT6);    // set pull-up resistors for P1.4, P1.5, and P1.6
+}
+
+
+void Motor_StopSimple(void){
+
+// Arresta entrambi i motori, mette a riposo i driver
+// Ritorna subito
+P5->OUT &= ~0x30;   //0xC0 ===> 0x30
+P2->OUT &= ~0xC0;   // spento
+P3->OUT &= ~0xC0;   // modalità di sospensione a bassa corrente
+}
+void Motor_ForwardSimple(uint16_t duty, uint32_t time){
+// Fa avanzare entrambi i motori durante il servizio (da 100 a 9900)
+// Viene eseguito per la durata del tempo (unità=10 ms), quindi si interrompe
+// Arresta i motori e torna indietro se è attivo un interruttore del paraurti
+// Restituisce dopo time*10ms o se viene premuto un interruttore bumper
+P5->OUT &= ~0x30; //PH(0 forward)
+P3->OUT |= 0xC0;  //SLP
+uint16_t duty1=10000-duty;
+do{
+
+    if(time <= duty){
+           uint32_t i;
+
+            for(i = 0; i < time; i++){
+
+                P2->OUT|=0xC0;
+                SysTick_Wait10ms(1);
+                if(Bump_Read() != 0xFF){
+                P2->OUT &= ~0xC0;
+                Motor_StopSimple();
+                return;
+                }
+            }
+            P2->OUT &= ~0xC0;
+            time = 0;
+         }
+         else
+         {
+
+            time  -= 10000;
+            P2->OUT |= 0xC0;//EN
+            SysTick_Wait10ms(duty);
+            if(Bump_Read() != 0xFF){
+            P2->OUT &= ~0xC0;
+            Motor_StopSimple();
+            return;
+            }
+            P2->OUT &= ~0xC0;
+            SysTick_Wait10ms(duty1);
+            if(Bump_Read() != 0xFF)
+            {
+                 P2->OUT &= ~0xC0;
+                 Motor_StopSimple();
+                 return;
+            }
+        }
+    }while( (time > 0) );
+    Motor_StopSimple();
+    SysTick_Wait10ms(time);
+}
+void Motor_BackwardSimple(uint16_t duty, uint32_t time){
+// Aziona entrambi i motori all'indietro durante il servizio (da 100 a 9900)
+// Viene eseguito per la durata del tempo (unità=10 ms), quindi si interrompe
+// Funziona anche se è attivo uno switch bumper
+// Ritorna dopo time*10ms
+    P5->OUT |= 0x30; //PH(1 backward)
+    P3->OUT |= 0xC0;  //SLP
+    uint16_t duty1=10000-duty;
+    do{
+
+        if(time <= duty)
+        {
+            uint32_t i;
+            for(i = 0; i < time; i++)
+            {
+                P2->OUT|=0xC0;
+                SysTick_Wait10ms(1);
+                if(Bump_Read() != 0xFF)
+                {
+                    P2->OUT &= ~0xC0;
+                    Motor_StopSimple();
+                    Clock_Delay1ms(500);
+                    return;
+                }
+            }
+            P2->OUT &= ~0xC0;
+            time = 0;
+        }
+        else{
+            time  -= 10000;
+            P2->OUT |= 0xC0;//EN
+            SysTick_Wait10ms(duty);
+            if(Bump_Read() != 0xFF)
+            {
+                P2->OUT &= ~0xC0;
+                Motor_StopSimple();
+                return;
+            }
+            P2->OUT &= ~0xC0;
+            SysTick_Wait10ms(duty1);
+            if(Bump_Read() != 0xFF)
+            {
+                P2->OUT &= ~0xC0;
+                Motor_StopSimple();
+                return;
+            }
+        }
+    }while( (time > 0)  );
+    Motor_StopSimple();
+    SysTick_Wait10ms(time);
+}
+void Motor_LeftSimple(uint16_t duty, uint32_t time){
+
+// Fa avanzare solo il motore sinistro in servizio (da 100 a 9900)
+// Il motore destro è fermo (dormire)
+// Viene eseguito per la durata del tempo (unità=10 ms), quindi si interrompe
+// Arresta il motore e ritorna se è attivo un interruttore del paraurti
+// Restituisce dopo time*10ms o se viene premuto un interruttore bumper
+P5->OUT &= ~0x80; //PH(0 forward)
+P3->OUT |= 0x80;  //wake left, SLP right
+uint16_t duty1=10000-duty;
+    do{
+        if(time <= duty){
+            uint32_t i;
+            for(i = 0; i < time; i++)
+            {
+                P2->OUT|=0x80;
+                SysTick_Wait10ms(1);
+                if(Bump_Read() != 0xFF)
+                {
+                    P2->OUT &= ~0x80;
+                    Motor_StopSimple();
+                    Clock_Delay1ms(500);
+                    return;
+                }
+            }
+            P2->OUT &= ~0x80;
+            time = 0;
+        }
+        else{
+
+            time  -= 10000;
+            P2->OUT |= 0x80;//EN
+            SysTick_Wait10ms(duty);
+            if(Bump_Read() != 0xFF)
+            {
+                P2->OUT &= ~0x80;
+                Motor_StopSimple();
+                return;
+            }
+
+            P2->OUT &= ~0x80;
+            SysTick_Wait10ms(duty1);
+            if(Bump_Read() != 0xFF)
+            {
+
+                P2->OUT &= ~0x80;
+                Motor_StopSimple();
+                return;
+            }
+        }
+
+    }while( (time > 0) );
+    Motor_StopSimple();
+    SysTick_Wait10ms(time);
+}
+
+
+
+void Motor_RightSimple(uint16_t duty, uint32_t time){
+// Fa avanzare il motore destro durante il servizio (da 100 a 9900)
+// Il motore sinistro è fermo (dormire)
+// Viene eseguito per la durata del tempo (unità=10 ms), quindi si interrompe
+// Arresta il motore e ritorna se è attivo un interruttore del paraurti
+// Restituisce dopo time*10ms o se viene premuto un interruttore bumper
+    P5->OUT &= ~0x40; //PH(0 forward)
+    P3->OUT |= 0x40;  //wake right, SLP left
+    uint16_t duty1=10000-duty;
+    do{
+
+        if(time <= duty){
+            uint32_t i;
+            for(i = 0; i < time; i++){
+                P2->OUT|=0x40;
+                SysTick_Wait10ms(1);
+                if(Bump_Read() != 0xFF){
+                    P2->OUT &= ~0x40;
+                    Motor_StopSimple();
+                    Clock_Delay1ms(500);
+                    return;
+                }
+            }
+            P2->OUT &= ~0x40;
+            time = 0;
+        }
+        else{
+            time  -= 10000;
+            P2->OUT |= 0x40;//EN
+            SysTick_Wait10ms(duty);
+            if(Bump_Read() != 0xFF){
+                P2->OUT &= ~0x40;
+                Motor_StopSimple();
+                return;
+            }
+            P2->OUT &= ~0x40;
+            SysTick_Wait10ms(duty1);
+            if(Bump_Read() != 0xFF){
+                P2->OUT &= ~0x40;
+                Motor_StopSimple();
+                return;
+            }
+        }
+    }while( (time > 0) );
+    Motor_StopSimple();
+    SysTick_Wait10ms(time);
+}
+
+//------------LaunchPad_Input------------
+// Input dagli Switch
+// Input: nessuno
+// Output: 0x00 none
+//         0x01 Button1
+//         0x02 Button2
+//         0x03 entarmbi Button1 e Button2
+uint8_t LaunchPad_Input(void){
+  //return (((((P1->IN))&0x10)>>3)|((((P1->IN))&0x02)>>1));   // legge P1.4,P1.1
+  Clock_Delay1ms(50);
+  return (P5->IN | 0xED);
+}
+
+//------------LaunchPad_Output------------
+// Output sul LaunchPad LEDs
+// Input: 0 off, bit0=red,bit1=green,bit2=blue
+// Output: nessuno
+void LaunchPad_Output(uint8_t data){  // scrivere tre bit di uscita di P2
+  P2->OUT = (P2->OUT&0xF8)|data;
+}
+// Driver test
+void Pause(void){
+  while(LaunchPad_Input()==0);  // aspetta il touch
+  while(LaunchPad_Input());     // aspetta il release
+}
+//--------------------------
+// inizializza sensori di urto
+// Make six Port 4 pins inputs
+// attiva interfaccia  pullup
+// pins 7,6,5,3,2,0
+void Bump_Init(void){
+    P4->SEL0 &= ~0xED;  // Configura P4.0, P4.2, P4.3, P4.5, P4.6, and P4.7 as GPIO
+    P4->SEL1 &= ~0xED;
+    P4->DIR &= ~0xED;   // Input
+    P4->REN |= 0xED;    // resistore interno
+}
+// leggi lo stato corrente of 6 switches
+// Restituisce un risultato logico positivo a 6 bit (da 0 a 63)
+// bit 7 Bump5
+// bit 6 Bump4
+// bit 5 Bump3
+// bit 3 Bump2
+// bit 2 Bump1
+// bit 0 Bump0
+uint8_t Bump_Read(void){
+    uint8_t value = P4->IN;
+    return value|0x12;
+}
+/*********
+
+* main.c
+
+*********/
+
+/**************
+
+* CLOCK Init
+
+*************/
+uint32_t ClockFrequency = 3000000; // cycles/second
+int32_t Prewait = 0;                   // loop tra BSP_Clock_InitFastest() chiamato  PCM idle (expect 0)
+uint32_t CPMwait = 0;                   // loop tra Power Active Mode Request and Current Power Mode matching requested mode (expect small)
+uint32_t Postwait = 0;                  // loop tra Current Power Mode richiesta corrispondente mode and PCM module idle (expect about 0)
+uint32_t IFlags = 0;                    // non-zero se la transizione non è valida
+uint32_t Crystalstable = 0;             // loops prima dei cristalli stabilizzanti (expect small)
+
+void Clock_Init32KHz(void){
+  // aspetta il PCMCTL0 e il Clock System per essere scrivibile e aspettare cheil Power Control Manager che stia inattivo
+  while(PCM->CTL1&0x00000100){
+//  while(PCMCTL1&0x00000100){
+    Prewait = Prewait + 1;
+    if(Prewait >= 100000){
+      return;                           // errore di timeout
+    }
+  }
+  // richiesta del power active mode LDO VCORE1 per supportare 48 MHz di frequenza
+  PCM->CTL0 = (PCM->CTL0&~0xFFFF000F) |     // pulisce PCMKEY nel campo dei bit e AMR nel campo dei bit
+//  PCMCTL0 = (PCMCTL0&~0xFFFF000F) |     // pulisce PCMKEY nel campo dei bit e AMR nel campo dei bit
+            0x695A0000 |                //scrivi il PCM key appropriata per sbloccare gli accessi di scrittura
+            0x00000001;                 // richiesta attivazione moalità potenza  LDO VCORE1
+  // controlla se la traduzione non è valida (see Figure 7-3 on p344 of datasheet)
+  if(PCM->IFG&0x00000004){
+    IFlags = PCM->IFG;                    // bit 2 impostato su transizione modalità attiva non valida; i bit 1-0 sono per gli errori relativi a LPM; il bit 6 è per l'errore correlato a DC-DC
+    PCM->CLRIFG = 0x00000004;             // cancellare il flag di transizione non valida
+    // da fare: guarda il campo dei bit CPM in PCMCTL0, scopri in quale modalità ti trovi e scorri il grafico per passare alla modalità che desideri
+    // o essere pigro e non fare nulla; questo dovrebbe funzionare almeno fuori reset, ma NON funzionerà se Clock_Int32kHz() o Clock_InitLowPower() è stato chiamato
+    return;
+  }
+  // attendere che il campo del bit CPM (Current Power Mode) rifletta una modifica alla modalità attiva LDO VCORE1
+  while((PCM->CTL0&0x00003F00) != 0x00000100){
+    CPMwait = CPMwait + 1;
+    if(CPMwait >= 500000){
+      return;                           // time out error
+    }
+  }
+  // attendere che PCMCTL0 e il sistema di clock siano scrivibili attendendo che Power Control Manager sia inattivo
+  while(PCM->CTL1&0x00000100){
+    Postwait = Postwait + 1;
+    if(Postwait >= 100000){
+      return;                           // time out error
+    }
+  }
+  // inizializzare PJ.3 e PJ.2 e renderli HFXT (PJ.3 built-in 48 MHz crystal out; PJ.2 built-in 48 MHz crystal in)
+  PJ->SEL0 |= 0x03;        // 0000 0011
+  PJ->SEL1 &= ~0x03;   // 1111 1100  configurare il cristallo integrato da 32 kHz per LFXT
+  CS->KEY = 0x695A;            // sbloccare il modulo CS per l'accesso al registro
+  CS->CTL2 = (CS->CTL2 &~0x00000003)|0x00000003|0x00000100;
+  CS->CTL2 &= ~0x00000200;     //disable low-frequency crystal bypass
+  // wait for LXFT clock to stabilize
+  while(CS->IFG&0x00000001){
+     CS->CLRIFG = 0x00000001;       // cancellare il flag di interruzione LFXT
+     Crystalstable=Crystalstable+1;
+    if(Crystalstable > 100000)
+      return ;            // time out error
+  }
+  CS->CTL1 = 0x10000200;       // SMCLK/2 HSMCLK MCLK from LXFT
+  CS->KEY = 0;         // bloccare il modulo CS                      // bloccare il modulo CS da accessi involontari
+  ClockFrequency = 48000000;
+//  SubsystemFrequency = 12000000;
+}
+void Clock_Init48MHz(void){
+// attendere che PCMCTL0 e il sistema di clock siano scrivibili attendendo che Power Control Manager sia inattivo
+while(PCM->CTL1&0x00000100){
+//  while(PCMCTL1&0x00000100)
+ Prewait = Prewait + 1;
+ if(Prewait >= 100000)
+ {
+      return;                           // time out error
+
+    }
+
+  }
+  // richiedere l'alimentazione in modalità attiva LDO VCORE1 per supportare la frequenza 48 MHz
+  PCM->CTL0 = (PCM->CTL0&~0xFFFF000F) |     // cancellare il campo di bit PCMKEY e il campo di bit AMR
+//  PCMCTL0 = (PCMCTL0&~0xFFFF000F) |     // cancellare il campo di bit PCMKEY e il campo di bit AMR
+            0x695A0000 |                // scrivere la chiave PCM corretta per sbloccare l'accesso in scrittura
+            0x00000001;                 // richiesta alimentazione modalità attiva LDO VCORE1
+  // controlla se la transizione non è valida (vedi Figura 7-3 su p344 del foglio dati)
+  if(PCM->IFG&0x00000004){
+    IFlags = PCM->IFG;                    // bit 2 impostato su transizione modalità attiva non valida; i bit 1-0 sono per gli errori relativi a LPM; il bit 6 è per l'errore correlato a DC-DC
+    PCM->CLRIFG = 0x00000004;             // cancellare il flag di transizione non valida
+    // da fare: guarda il campo dei bit CPM in PCMCTL0, scopri in quale modalità ti trovi e scorri il grafico per passare alla modalità che desideri
+    // o essere pigro e non fare nulla; questo dovrebbe funzionare almeno fuori reset, ma NON funzionerà se Clock_Int32kHz() o Clock_InitLowPower() è stato chiamato
+    return;
+  }
+  // attendere che il campo del bit CPM (Current Power Mode) rifletta una modifica alla modalità attiva LDO VCORE1
+  while((PCM->CTL0&0x00003F00) != 0x00000100){
+    CPMwait = CPMwait + 1;
+    if(CPMwait >= 500000){
+      return;                           // time out error
+    }
+  }
+  // attendere che PCMCTL0 e il sistema di clock siano scrivibili attendendo che Power Control Manager sia inattivo
+  while(PCM->CTL1&0x00000100){
+    Postwait = Postwait + 1;
+    if(Postwait >= 100000){
+      return;                           // time out error
+    }
+  }
+  // inizializzare PJ.3 e PJ.2 e renderli HFXT (PJ.3 built-in 48 MHz crystal out; PJ.2 built-in 48 MHz crystal in)
+  PJ->SEL0 |= 0x0C;
+  PJ->SEL1 &= ~0x0C;                    //  configurare il cristallo integrato da 48 MHz per il funzionamento HFXT
+  CS->KEY = 0x695A;                     // sbloccare il modulo CS per l'accesso al registro
+  CS->CTL2 = (CS->CTL2&~0x00700000) |   // cancellare il campo di bit HFXTFREQ
+           0x00600000 |                 // configurare per cristallo esterno a 48 MHz
+           0x00010000 |                 // Selezione dell'azionamento dell'oscillatore HFXT per cristalli >4 MHz
+           0x01000000;                  // abilita HFXT
+  CS->CTL2 &= ~0x02000000;              // disabilita il bypass del cristallo ad alta frequenza
+  // attendere che il clock HFXT si stabilizzi
+  while(CS->IFG&0x00000002){
+    CS->CLRIFG = 0x00000002;// cancellare il flag di interruzione dell'oscillatore HFXT
+    Crystalstable = Crystalstable + 1;
+    if(Crystalstable > 100000){
+      return;                           // time out error
+    }
+  }
+  // configurare per 2 stati di attesa (minimo per il funzionamento a 48 MHz) per Flash Bank 0
+  FLCTL->BANK0_RDCTL = (FLCTL->BANK0_RDCTL&~0x0000F000)|FLCTL_BANK0_RDCTL_WAIT_2;
+  // configurare per 2 stati di attesa (minimo per il funzionamento a 48 MHz) per Flash Bank 1
+  FLCTL->BANK1_RDCTL = (FLCTL->BANK1_RDCTL&~0x0000F000)|FLCTL_BANK1_RDCTL_WAIT_2;
+  CS->CTL1 = 0x20000000 |               // configurare per il divisore SMCLK /4
+           0x00100000 |                 // configurare per il divisore HSMCLK /2
+           0x00000200 |                 // configure per ACLK proveniente da REFOCLK
+           0x00000050 |                 // configure per SMCLK e HSMCLK provenienti da HFXTCLK
+           0x00000005;                  // configure per MCLK proveniente da HFXTCLK
+  CS->KEY = 0;                          // bloccare il modulo CS da accessi involontari
+  ClockFrequency = 48000000;
+//  SubsystemFrequency = 12000000;
+}
+// delay function
+// che ritarda circa 6*ulCount cicli
+// ulCount=8000 => 1ms = (8000 loop)(6 cicli/loop)(20.83 ns/ciclo)
+// Codice Compositore Studio Code
+void delay(unsigned long ulCount){
+  __asm (  "pdloop:  subs    r0, #1\n"
+  "    bne    pdloop\n");
+}
+// ------------Clock_Dely1ms------------
+// Funzione di ritardo semplice che ritarda circa n millisecondi.
+// Input: n, numero di msec di attesa
+// Outputs: none
+void Clock_Delay1ms(uint32_t n){
+  while(n){
+    delay(ClockFrequency/9162);   // 1 msec, tuned at 48 MHz
+    n--;
+  }
+}
+/**************
+
+*  SysTick Timer Init
+
+*************/
+void SysTick_Init(void){
+  SysTick->LOAD = 0x00FFFFFF;           // valore massimo di ricarica
+  SysTick->CTRL = 0x00000005;           // abilita SysTick senza interruzioni
+}
+void SysTick_Wait(uint32_t delay){
+  SysTick->LOAD = (delay - 1);// conto alla rovescia fino a zero
+  SysTick->VAL = 0;          // qualsiasi scrittura su CVR lo cancella e COUNTFLAG in CSR
+  while(( SysTick->CTRL&0x00010000) == 0){};
+}
+// Ritardo utilizzando l'attesa occupato.
+// presuppone un clock del bus di 48 MHz
+void SysTick_Wait10ms(uint32_t delay){
+  uint32_t i;
+  for(i=0; i<delay; i++){
+    SysTick_Wait(480000);  // wait 10ms (assumes 48 MHz clock)
+  }
+}
+uint8_t Reflectance_Read(uint32_t time)
+{
+    P5->DIR |= BIT3;
+    P7->DIR |= BIT0;
+    P7->DIR |= BIT1;
+    P7->DIR |= BIT2;
+    P7->DIR |= BIT3;
+    P7->DIR |= BIT4;
+    P7->DIR |= BIT5;
+    P7->DIR |= BIT6;
+    P7->DIR |= BIT7;
+    P7->DIR |= BIT0;
+    P7->OUT |= BIT1;
+    P7->OUT |= BIT2;
+    P7->OUT |= BIT3;
+    P7->OUT |= BIT4;
+    P7->OUT |= BIT5;
+    P7->OUT |= BIT6;
+    P7->OUT |= BIT7;
+    Clock_Delay1ms(10);
+    P7->DIR &= BIT0;
+    P7->DIR &= BIT1;
+    P7->DIR &= BIT2;
+    P7->DIR &= BIT3;
+    P7->DIR &= BIT4;
+    P7->DIR &= BIT5;
+    P7->DIR &= BIT6;
+    P7->DIR &= BIT7;
+    Clock_Delay1ms(time);
+
+}
